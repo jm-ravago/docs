@@ -126,22 +126,39 @@ that we can roll those forward later on.
 ```
 db2rav01@rav-db-2$ mkdir /tmp/transaction-logs/
 db2rav01@rav-db-2$ db2 restore database OHMDOCK logs from /tmp taken at <xxxxxxxxxxxx> logtarget /tmp/transaction-logs/
-db2rav01@rav-db-2$ db2 restore database OHMDOCK from /tmp/ taken at <xxxxxxxxxxxx> replace existing
-db2rav01@rav-db-2$ db2 rollforward database OHMDOCK to end of logs and complete overflow log path "(/tmp/transaction-logs)"
+db2rav01@rav-db-2$ db2 restore database OHMDOCK from /tmp/ taken at <xxxxxxxxxxxx> into OHMSMALL
+db2rav01@rav-db-2$ db2 rollforward database OHMSMALL to end of logs and complete overflow log path "(/tmp/transaction-logs)"
 ```
 
-Then export the database again.
+Then export the database again. We need to reconfigure the log archive method. If we don't
+the restored database will need to be rolled forward before it can be used. However the
+database startup script does not do this.
 
 ```
-db2rav01@rav-db-2$ rm -rf /tmp/OHMDOCK* /tmp/transaction-log
-db2rav01@rav-db-2$ db2 backup database OHMDOCK to /tmp/ compress
+db2rav01@rav-db-2$ db2 update db cfg for OHMSMALL using logarchmeth1 off
+db2rav01@rav-db-2$ db2 backup database OHMSMALL to /tmp/ compress
 
-Backup successful. The timestamp for this backup image is : <xxxxxxxxxxxx>
+Backup successful. The timestamp for this backup image is : <yyyyyyyyyyyy>
 ```
 
+The database pods start from a tar archive which contains a backup for `ohmsmall` and
+optionally `ravcp`. We need to recreate such an archive where we replace the existing
+backup for `ohmsmall` with the newly created backup.
+
 ```
-docker cp 
+$ curl -L -O http://nexus.ravago.com/images/<original-branch-name>/db2_base.tar
+$ mkdir content && cd content
+$ tar -xf ../db2_base.tar
+$ rm OHMSMALL*
+$ docker cp rav-db-2:/tmp/OHMSMALL.0.db2rav01.DBPART000.yyyyyyyyyyyy.001 .
+$ tar -cf ../db2_base_recreated.tar
 ```
+
+The new tar can then be uploaded to the nexus, either by replacing the existing
+`db2_base.tar`, or by uploading it as `db2_base.tar` in a newly created directory. Keep in
+mind that the file itself should always we named `db2_base.tar` (to know why have a look
+at [the database startup script](https://github.com/ravago-sdc/application-containers/blob/master/dockerfiles/db2-rav-database/create_databases.sh#L34)).
+
 
 more detailed reading:
 
